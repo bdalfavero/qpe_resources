@@ -1,3 +1,5 @@
+import argparse
+import json
 from math import sqrt, ceil
 import openfermion as of
 from qiskit.circuit.library import PauliEvolutionGate, phase_estimation
@@ -14,16 +16,25 @@ from qpe_trotter import (
 )
 
 def main():
-    l = 2
-    t = 1.0
-    u = 4.0
-    max_mpo_bond = 100
-    max_mps_bond = 15
-    evol_time = 0.5
-    energy_error = 1e-3
+    parser = argparse.ArgumentParser()
+    parser.add_argument("input_file", type=str, help="JSON file for input.")
+    parser.add_argument("output_file", type=str, help="JSON file for ouptut.")
+    args = parser.parse_args()
+
+    with open(args.input_file, "r") as f:
+        input_dict = json.load(f)
+    l = input_dict["l"]
+    t = input_dict["t"]
+    u = input_dict["u"]
+    max_mpo_bond = input_dict["max_mpo_bond"]
+    max_mps_bond = input_dict["max_mps_bond"]
+    evol_time = input_dict["evol_time"]
+    energy_error = input_dict["energy_error"]
 
     ham = of.fermi_hubbard(l, l, t, u, spinless=True)
     ham_jw = of.transforms.jordan_wigner(ham)
+    nterms = len(ham_jw.terms)
+    print(f"Hamiltonian has {nterms} terms.")
     ham_cirq = of.transforms.qubit_operator_to_pauli_sum(ham_jw)
     qs = ham_cirq.qubits
     ham_qiskit = cirq_pauli_sum_to_qiskit_pauli_op(ham_cirq)
@@ -58,6 +69,21 @@ def main():
     print("Gate counts:")
     for k, v in counts.items():
         print(f"{k}, {v}")
+    
+    output_dict = {
+        "l": l,
+        "t": t,
+        "u": u,
+        "evol_time": evol_time,
+        "energy_error": energy_error,
+        "num_ancillae": num_ancillae,
+        "dt": dt,
+        "num_steps": num_steps,
+        "depth": depth,
+        "counts": counts
+    }
+    with open(args.output_file, "w") as f:
+        json.dump(output_dict, f)
 
 if __name__ == "__main__":
     main()
