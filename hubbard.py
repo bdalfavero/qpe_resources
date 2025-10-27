@@ -63,9 +63,11 @@ def main():
     num_ancillae = bits_for_epsilon(energy_error)
     print(f"Synthesizing QPE circuit with {num_ancillae} ancillae")
     qpe_ckt = phase_estimation(num_ancillae, evol_gate)
+    print("Transpiling.")
     qpe_ckt_transpiled = transpile(qpe_ckt, basis_gates=["u3", "cx"])
     depth = qpe_ckt_transpiled.depth()
     counts = get_gate_counts(qpe_ckt_transpiled)
+    print(f"Transpiled circuit has depth {depth}.")
     print("Gate counts:")
     for k, v in counts.items():
         print(f"{k}, {v}")
