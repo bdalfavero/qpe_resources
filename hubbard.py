@@ -1,13 +1,17 @@
 import argparse
 import json
 from math import sqrt, ceil
+import cirq
 import openfermion as of
 from qiskit.circuit.library import PauliEvolutionGate, phase_estimation
 from qiskit.synthesis import LieTrotter
+from qiskit.qasm2 import loads
 from qiskit import transpile
 import quimb.tensor as qtn
 from tensor_network_common import pauli_sum_to_mpo
 from convert import cirq_pauli_sum_to_qiskit_pauli_op
+from kcommute import get_si_sets
+from trotter_circuit import trotter_multistep_from_groups
 from qpe_trotter import (
     group_single_strings,
     trotter_perturbation,
@@ -30,6 +34,10 @@ def main():
     max_mps_bond = input_dict["max_mps_bond"]
     evol_time = input_dict["evol_time"]
     energy_error = input_dict["energy_error"]
+    method = input_dict["method"]
+    k = input_dict["k"]
+
+    assert method in ["kcomm", "paulihedral"]
 
     ham = of.fermi_hubbard(l, l, t, u, spinless=True)
     ham_jw = of.transforms.jordan_wigner(ham)
@@ -37,6 +45,8 @@ def main():
     print(f"Hamiltonian has {nterms} terms.")
     ham_cirq = of.transforms.qubit_operator_to_pauli_sum(ham_jw)
     qs = ham_cirq.qubits
+    nq = len(qs)
+    print(f"Hamiltonian has {nq} qubits.")
     ham_qiskit = cirq_pauli_sum_to_qiskit_pauli_op(ham_cirq)
     ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
 
@@ -49,7 +59,11 @@ def main():
     ground_energy = dmrg.energy.real
     print(f"Final DMRG energy: {ground_energy:4.5e}")
 
-    groups = group_single_strings(ham_cirq)
+    if method == "paulihedral":
+        groups = group_single_strings(ham_cirq)
+    else:
+        group_lists = get_si_sets(ham_cirq, k)
+        groups = [sum(group) for group in group_lists]
     v2 = trotter_perturbation(groups)
     v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
     # Get energy from Mehendale Eqn. 8
@@ -59,10 +73,18 @@ def main():
     num_steps = ceil(evol_time / dt)
     print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
 
-    evol_gate = PauliEvolutionGate(ham_qiskit, time=evol_time, synthesis=LieTrotter(reps=num_steps))
     num_ancillae = bits_for_epsilon(energy_error)
     print(f"Synthesizing QPE circuit with {num_ancillae} ancillae")
-    qpe_ckt = phase_estimation(num_ancillae, evol_gate)
+    if method == "paulihedral":
+        print("Using Paulihedral.")
+        evol_gate = PauliEvolutionGate(ham_qiskit, time=evol_time, synthesis=LieTrotter(reps=num_steps))
+        qpe_ckt = phase_estimation(num_ancillae, evol_gate)
+    else:
+        trotter_circuit = trotter_multistep_from_groups(groups, qs, dt, num_steps)
+        trotter_optimized = cirq.optimize_for_target_gateset(trotter_circuit, gateset=cirq.SqrtIswapTargetGateset())
+        trotter_qasm = cirq.qasm(trotter_optimized)
+        trotter_circuit_qiskit = loads(trotter_qasm)
+        qpe_ckt = phase_estimation(num_ancillae, trotter_circuit_qiskit)
     print("Transpiling.")
     qpe_ckt_transpiled = transpile(qpe_ckt, basis_gates=["u3", "cx"])
     depth = qpe_ckt_transpiled.depth()
