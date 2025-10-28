@@ -2,6 +2,7 @@ import argparse
 import json
 from math import sqrt, ceil
 import openfermion as of
+import qiskit
 from qiskit.circuit.library import PauliEvolutionGate, phase_estimation
 from qiskit.synthesis import LieTrotter
 from qiskit import transpile
@@ -37,6 +38,8 @@ def main():
     print(f"Hamiltonian has {nterms} terms.")
     ham_cirq = of.transforms.qubit_operator_to_pauli_sum(ham_jw)
     qs = ham_cirq.qubits
+    nq = len(qs)
+    print(f"Hamiltonian has {nq} qubits.")
     ham_qiskit = cirq_pauli_sum_to_qiskit_pauli_op(ham_cirq)
     ham_mpo = pauli_sum_to_mpo(ham_cirq, qs, max_mpo_bond)
 
@@ -59,6 +62,7 @@ def main():
     num_steps = ceil(evol_time / dt)
     print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
 
+    # Synethsize a circuit with multiple ancillae (traditional QPE)
     evol_gate = PauliEvolutionGate(ham_qiskit, time=evol_time, synthesis=LieTrotter(reps=num_steps))
     num_ancillae = bits_for_epsilon(energy_error)
     print(f"Synthesizing QPE circuit with {num_ancillae} ancillae")
@@ -72,6 +76,19 @@ def main():
     for k, v in counts.items():
         print(f"{k}, {v}")
     
+    # Synthesize a controlled Trotter step of time dt.
+    print("Synthesizing SAPE circuit.")
+    sape_ckt = qiskit.QuantumCircuit(nq + 1)
+    controlled_evol_gate = evol_gate.control()
+    sape_ckt.append(controlled_evol_gate, range(nq + 1))
+    sape_transpiled = transpile(sape_ckt, basis_gates=["u3", "cx"])
+    sape_depth = sape_transpiled.depth()
+    sape_counts = get_gate_counts(sape_transpiled)
+    print(f"Transpiled circuit has depth {depth}.")
+    print("Gate counts:")
+    for k, v in sape_counts.items():
+        print(f"{k}, {v}")
+    
     output_dict = {
         "l": l,
         "t": t,
@@ -82,7 +99,9 @@ def main():
         "dt": dt,
         "num_steps": num_steps,
         "depth": depth,
-        "counts": counts
+        "sape_depth": sape_depth,
+        "counts": counts,
+        "sape_counts": sape_counts
     }
     with open(args.output_file, "w") as f:
         json.dump(output_dict, f)
