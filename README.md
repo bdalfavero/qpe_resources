@@ -2,7 +2,18 @@
 
 Here we will use the perturbative technique from [this paper](https://arxiv.org/abs/2312.13282) to see how what physical resources we need for quantum phase estimation.
 
-The script `hubbard.py` computes gate counts for the Fermi-Hubbard model.
+The script `hubbard.py` computes gate counts for the Fermi-Hubbard model. The script expects an input file and an output file. Both are JSON. An example input file is given here:
+```
+{
+    "l": 2,
+    "t": 1.0,
+    "u": 4.0,
+    "max_mpo_bond": 100,
+    "max_mps_bond": 15,
+    "energy_error": 0.001,
+    "evol_time": 0.1
+}
+```
 
 ## Notes on choosing $t$
 
