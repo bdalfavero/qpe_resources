@@ -22,4 +22,4 @@ For vanilla QPE:
 
 For SAPE:
 1. [The Harrow paper](https://arxiv.org/abs/2503.05647) says we need a time $t = 2^M$, where $M$ is the number of bits we need.
-1. [This paper](https://quantum-journal.org/papers/q-2023-11-06-1165/) is cited by the Harrow paper as an example of robust QPE. They just frame everything in terms of a unitary $U$, not specifically getting energies from a Hamiltonian.
+1. [This paper](https://quantum-journal.org/papers/q-2023-11-06-1165/) is cited by the Harrow paper as an example of robust QPE. They just frame everything in terms of a unitary $U$, not specifically getting energies from a Hamiltonian. They do allude to a maximum *circuit depth* $T_max = \Omega(\epsilon^{-1})$. In section 4 they choose an evolution time to put the energy in the interval $[-\pi/4, \pi/4]$.
