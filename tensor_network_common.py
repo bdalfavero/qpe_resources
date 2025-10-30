@@ -36,6 +36,9 @@ def pauli_string_to_mpo(pstring: cirq.PauliString, qs: List[cirq.Qid]) -> Matrix
 def pauli_sum_to_mpo(psum: cirq.PauliSum, qs: List[cirq.Qid], max_bond: int) -> MatrixProductOperator:
     """Convert a Pauli sum to an MPO."""
 
+    if len(psum) == 0:
+        raise ValueError("Paulisum passed has no terms.")
+
     for i, p in enumerate(psum):
         if i == 0:
             mpo = pauli_string_to_mpo(p, qs)

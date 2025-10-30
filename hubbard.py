@@ -1,6 +1,7 @@
 import argparse
 import json
 from math import sqrt, ceil
+import numpy as np
 import openfermion as of
 import qiskit
 from qiskit.circuit.library import PauliEvolutionGate, phase_estimation
@@ -13,7 +14,8 @@ from qpe_trotter import (
     group_single_strings,
     trotter_perturbation,
     bits_for_epsilon,
-    get_gate_counts
+    get_gate_counts,
+    sample_eps2
 )
 
 def main():
@@ -52,6 +54,7 @@ def main():
     ground_energy = dmrg.energy.real
     print(f"Final DMRG energy: {ground_energy:4.5e}")
 
+    # Use the exact method.
     groups = group_single_strings(ham_cirq)
     v2 = trotter_perturbation(groups)
     v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
@@ -61,6 +64,20 @@ def main():
     dt = sqrt(energy_error / eps2)
     num_steps = ceil(evol_time / dt)
     print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
+
+    # Use the largest term to get a pessimistic bound.
+    coeffs = np.array([ps.coefficient for ps in ham_cirq])
+    i_max = np.argmax(np.abs(coeffs))
+    max_coeff = coeffs[i_max]
+    eps2_bound = (-1. / 24) * 0.5 * max_coeff ** 3
+    print(f"eps2_bound = {eps2_bound}")
+    dt_bound = sqrt(energy_error / abs(eps2_bound))
+    print(f"dt_bound = {dt_bound}")
+
+    # Use the sampling method.
+    # nsamples = 100_000
+    # eps2_sampled = sample_eps2(groups, ground_state, nsamples, qs, max_mpo_bond)
+    # print(f"eps2_sampled = {eps2_sampled}")
 
     # Synethsize a circuit with multiple ancillae (traditional QPE)
     evol_gate = PauliEvolutionGate(ham_qiskit, time=evol_time, synthesis=LieTrotter(reps=num_steps))
