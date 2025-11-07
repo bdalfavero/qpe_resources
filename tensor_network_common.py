@@ -25,7 +25,10 @@ def pauli_string_to_mpo(pstring: cirq.PauliString, qs: List[cirq.Qid]) -> Matrix
     tensors: List[np.ndarray] = []
     for i, m in enumerate(matrices):
         if i == 0:
-            tensors.append(m.reshape((2, 2, 1)))
+            if len(matrices) == 1:
+                tensors.append(m)
+            else:
+                tensors.append(m.reshape((2, 2, 1)))
         elif i == len(matrices) - 1:
             tensors.append(m.reshape((1, 2, 2)))
         else:
