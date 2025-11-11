@@ -2,6 +2,7 @@ import argparse
 import json
 from math import sqrt, ceil
 import numpy as np
+from scipy.sparse.linalg import norm
 import openfermion as of
 import qiskit
 from qiskit.circuit.library import PauliEvolutionGate, phase_estimation
@@ -13,7 +14,6 @@ from convert import cirq_pauli_sum_to_qiskit_pauli_op
 from qpe_trotter import (
     group_single_strings,
     trotter_perturbation,
-    bits_for_epsilon,
     get_gate_counts,
     sample_eps2
 )
@@ -26,15 +26,16 @@ def main():
 
     with open(args.input_file, "r") as f:
         input_dict = json.load(f)
-    l = input_dict["l"]
+    l1 = input_dict["l1"]
+    l2 = input_dict["l2"]
     t = input_dict["t"]
     u = input_dict["u"]
+    nsamples = int(input_dict["nsamples"])
     max_mpo_bond = input_dict["max_mpo_bond"]
     max_mps_bond = input_dict["max_mps_bond"]
-    evol_time = input_dict["evol_time"]
     energy_error = input_dict["energy_error"]
 
-    ham = of.fermi_hubbard(l, l, t, u, spinless=True)
+    ham = of.fermi_hubbard(l1, l2, t, u, spinless=True)
     ham_jw = of.transforms.jordan_wigner(ham)
     nterms = len(ham_jw.terms)
     print(f"Hamiltonian has {nterms} terms.")
@@ -54,6 +55,17 @@ def main():
     ground_energy = dmrg.energy.real
     print(f"Final DMRG energy: {ground_energy:4.5e}")
 
+    if nq <= 10:
+        ham_sparse = of.linalg.get_sparse_operator(ham_jw)
+        ham_norm = norm(ham_sparse)
+    else:
+        # Approximate the norm of the Hamiltonian with the triangle inequality.
+        # This is an upper bond on the norm, so we will have smaller tau than we should.
+        coeffs = np.array([ps.coefficient for ps in ham_cirq])
+        ham_norm = np.sum(np.abs(coeffs))
+    evol_time = np.pi / (4. * ham_norm)
+    print(f"Evolution time = {evol_time}")
+
     # Use the exact method.
     groups = group_single_strings(ham_cirq)
     v2 = trotter_perturbation(groups)
@@ -69,29 +81,28 @@ def main():
     coeffs = np.array([ps.coefficient for ps in ham_cirq])
     i_max = np.argmax(np.abs(coeffs))
     max_coeff = coeffs[i_max]
-    eps2_bound = (-1. / 24) * 0.5 * max_coeff ** 3
+    eps2_bound = (1. / 24) * 0.5 * max_coeff.real ** 3
     print(f"eps2_bound = {eps2_bound}")
-    dt_bound = sqrt(energy_error / abs(eps2_bound))
+    dt_bound = sqrt(energy_error / abs(eps2_bound)).real
     print(f"dt_bound = {dt_bound}")
 
     # Use the sampling method.
-    # nsamples = 100_000
-    # eps2_sampled = sample_eps2(groups, ground_state, nsamples, qs, max_mpo_bond)
-    # print(f"eps2_sampled = {eps2_sampled}")
+    sample_checkpoints, eps2_sampled, _ = sample_eps2(groups, qs, ground_state, nsamples, max_mpo_bond=max_mpo_bond)
+    print(f"eps2_sampled = {eps2_sampled[-1]}")
 
     # Synethsize a circuit with multiple ancillae (traditional QPE)
     evol_gate = PauliEvolutionGate(ham_qiskit, time=evol_time, synthesis=LieTrotter(reps=num_steps))
-    num_ancillae = bits_for_epsilon(energy_error)
-    print(f"Synthesizing QPE circuit with {num_ancillae} ancillae")
-    qpe_ckt = phase_estimation(num_ancillae, evol_gate)
-    print("Transpiling.")
-    qpe_ckt_transpiled = transpile(qpe_ckt, basis_gates=["u3", "cx"])
-    depth = qpe_ckt_transpiled.depth()
-    counts = get_gate_counts(qpe_ckt_transpiled)
-    print(f"Transpiled circuit has depth {depth}.")
-    print("Gate counts:")
-    for k, v in counts.items():
-        print(f"{k}, {v}")
+    # num_ancillae = bits_for_epsilon(energy_error)
+    # print(f"Synthesizing QPE circuit with {num_ancillae} ancillae")
+    # qpe_ckt = phase_estimation(num_ancillae, evol_gate)
+    # print("Transpiling.")
+    # qpe_ckt_transpiled = transpile(qpe_ckt, basis_gates=["u3", "cx"])
+    # depth = qpe_ckt_transpiled.depth()
+    # counts = get_gate_counts(qpe_ckt_transpiled)
+    # print(f"Transpiled circuit has depth {depth}.")
+    # print("Gate counts:")
+    # for k, v in counts.items():
+    #     print(f"{k}, {v}")
     
     # Synthesize a controlled Trotter step of time dt.
     print("Synthesizing SAPE circuit.")
@@ -101,23 +112,25 @@ def main():
     sape_transpiled = transpile(sape_ckt, basis_gates=["u3", "cx"])
     sape_depth = sape_transpiled.depth()
     sape_counts = get_gate_counts(sape_transpiled)
-    print(f"Transpiled circuit has depth {depth}.")
+    print(f"Transpiled circuit has depth {sape_depth}.")
     print("Gate counts:")
     for k, v in sape_counts.items():
         print(f"{k}, {v}")
     
     output_dict = {
-        "l": l,
+        "l1": l1,
+        "l2": l2,
         "t": t,
         "u": u,
         "evol_time": evol_time,
         "energy_error": energy_error,
-        "num_ancillae": num_ancillae,
+        "eps2_exact": eps2,
+        "eps2_bound": eps2_bound,
+        "sample_checkpoints": sample_checkpoints,
+        "eps2_samples": eps2_sampled,
         "dt": dt,
         "num_steps": num_steps,
-        "depth": depth,
         "sape_depth": sape_depth,
-        "counts": counts,
         "sape_counts": sape_counts
     }
     with open(args.output_file, "w") as f:
