@@ -3,6 +3,7 @@ import json
 import h5py
 from math import sqrt, ceil
 import numpy as np
+from scipy.sparse.linalg import norm
 import openfermion as of
 from openfermionpyscf import run_pyscf
 import qiskit
@@ -55,10 +56,14 @@ def main():
     ground_energy = dmrg.energy.real
     print(f"Final DMRG energy: {ground_energy:4.5e}")
 
-    # Approximate the norm of the Hamiltonian with the triangle inequality.
-    # This is an upper bond on the norm, so we will have smaller tau than we should.
-    coeffs = np.array([ps.coefficient for ps in ham_cirq])
-    ham_norm = np.sum(np.abs(coeffs))
+    if nq <= 10:
+        ham_sparse = of.linalg.get_sparse_operator(ham_jw)
+        ham_norm = norm(ham_sparse)
+    else:
+        # Approximate the norm of the Hamiltonian with the triangle inequality.
+        # This is an upper bond on the norm, so we will have smaller tau than we should.
+        coeffs = np.array([ps.coefficient for ps in ham_cirq])
+        ham_norm = np.sum(np.abs(coeffs))
     evol_time = np.pi / (4. * ham_norm)
     print(f"Evolution time = {evol_time}")
 
