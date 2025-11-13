@@ -1,5 +1,6 @@
 import argparse
 import json
+import h5py
 from math import sqrt, ceil
 import numpy as np
 from scipy.sparse.linalg import norm
@@ -21,7 +22,7 @@ from qpe_trotter import (
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("input_file", type=str, help="JSON file for input.")
-    parser.add_argument("output_file", type=str, help="JSON file for ouptut.")
+    parser.add_argument("output_file", type=str, help="HDF5 file for ouptut.")
     args = parser.parse_args()
 
     with open(args.input_file, "r") as f:
@@ -114,27 +115,50 @@ def main():
     sape_counts = get_gate_counts(sape_transpiled)
     print(f"Transpiled circuit has depth {sape_depth}.")
     print("Gate counts:")
+    qubit_numbers = []
+    gate_counts = []
     for k, v in sape_counts.items():
         print(f"{k}, {v}")
+        qubit_numbers.append(k)
+        gate_counts.append(v)
     
-    output_dict = {
-        "l1": l1,
-        "l2": l2,
-        "t": t,
-        "u": u,
-        "evol_time": evol_time,
-        "energy_error": energy_error,
-        "eps2_exact": eps2,
-        "eps2_bound": eps2_bound,
-        "sample_checkpoints": sample_checkpoints,
-        "eps2_samples": eps2_sampled,
-        "dt": dt,
-        "num_steps": num_steps,
-        "sape_depth": sape_depth,
-        "sape_counts": sape_counts
-    }
-    with open(args.output_file, "w") as f:
-        json.dump(output_dict, f)
+    # output_dict = {
+    #     "l1": l1,
+    #     "l2": l2,
+    #     "t": t,
+    #     "u": u,
+    #     "evol_time": evol_time,
+    #     "energy_error": energy_error,
+    #     "eps2_exact": eps2,
+    #     "eps2_bound": eps2_bound,
+    #     "sample_checkpoints": sample_checkpoints,
+    #     "eps2_samples": eps2_sampled,
+    #     "dt": dt,
+    #     "num_steps": num_steps,
+    #     "sape_depth": sape_depth,
+    #     "sape_counts": sape_counts
+    # }
+    # with open(args.output_file, "w") as f:
+    #     json.dump(output_dict, f)
+
+    f = h5py.File(args.output_file, "w")
+    f.create_dataset("l1", data=l1)
+    f.create_dataset("l2", data=l2)
+    f.create_dataset("t", data=t)
+    f.create_dataset("u", data=u)
+    f.create_dataset("evol_time", data=evol_time)
+    f.create_dataset("energy_error", data=energy_error)
+    f.create_dataset("eps2_exact", data=eps2)
+    f.create_dataset("eps2_bound", data=eps2_bound)
+    f.create_dataset("sample_checkpoints", data=np.array(sample_checkpoints))
+    f.create_dataset("eps2_samples", data=np.array(eps2_sampled))
+    f.create_dataset("last_sample", data=eps2_sampled[-1])
+    f.create_dataset("dt", data=dt)
+    f.create_dataset("num_steps", data=num_steps)
+    f.create_dataset("sape_depth", data=sape_depth)
+    f.create_dataset("qubit_numbers", data=qubit_numbers)
+    f.create_dataset("gate_counts", data=gate_counts)
+    f.close()
 
 if __name__ == "__main__":
     main()

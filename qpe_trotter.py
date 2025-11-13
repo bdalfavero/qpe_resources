@@ -1,6 +1,6 @@
 """This analysis is based on https://arxiv.org/abs/2312.13282"""
 
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Union
 from random import randint, random
 import numpy as np
 import cirq
@@ -63,7 +63,7 @@ def trotter_perturbation(hamiltonian_terms: List[cirq.PauliSum]) -> cirq.PauliSu
 
 
 def sample_eps2(
-    hamiltonian: cirq.PauliSum, qs: List[cirq.Qid], ground_state: MatrixProductState,
+    hamiltonian: cirq.PauliSum, qs: List[cirq.Qid], ground_state: Union[np.ndarray, MatrixProductState],
     samples: int, interval: int=10, max_mpo_bond: int=100
 ) -> Tuple[List[int], List[float], int]:
     """Estimate eps2 by sampling terms uniformly."""
@@ -104,16 +104,6 @@ def sample_eps2(
             delta = 1.
         else:
             delta = 0.
-        # if not commutes(h_nu, h_mu, blocks):
-        #     comm_nu_mu = 2. * h_nu * h_mu # = [H_nu, H_mu] when they anti-commute.
-        #     if not commutes(h_nu_prime, comm_nu_mu, blocks):
-        #         # This term contributes.
-        #         comm_three = 2. * h_nu_prime * comm_nu_mu
-        #         comm_three_mpo = pauli_string_to_mpo(comm_three, qs)
-        #         mat_elem = ground_state.H @ comm_three_mpo.apply(ground_state)
-        #         running_estimate += (1 - delta / 2) * mat_elem.real * num_sum
-        #     else:
-        #         num_zero += 1
         comm_nu_mu = h_nu * h_mu - h_mu * h_nu
         comm_three = h_nu_prime * comm_nu_mu - comm_nu_mu * h_nu_prime
         # print(mu, nu, nu_prime)
@@ -121,17 +111,21 @@ def sample_eps2(
         # print(1 - delta / 2)
         # print(comm_three)
         if len(comm_three) != 0:
-            comm_three_mpo = pauli_sum_to_mpo(comm_three, qs, max_mpo_bond)
-            mat_elem = ground_state.H @ comm_three_mpo.apply(ground_state)
-            running_estimate += (1 - delta / 2) * mat_elem.real / p
-            # v2 += (-1 / 24.) * (1 - delta / 2) * comm_three / p
+            if isinstance(ground_state, MatrixProductState):
+                comm_three_mpo = pauli_sum_to_mpo(comm_three, qs, max_mpo_bond)
+                mat_elem = ground_state.H @ comm_three_mpo.apply(ground_state)
+                running_estimate += (1 - delta / 2) * mat_elem.real / p
+            else:
+                qubit_map = {q: i for i, q in enumerate(qs)}
+                mat_elem = comm_three.expectation_from_state_vector(ground_state, qubit_map)
+                running_estimate += (1 - delta / 2) * mat_elem.real / p
+            v2 += (-1 / 24.) * (1 - delta / 2) * comm_three / p
         else:
             num_zero += 1
         if n % interval == 0 or n == samples - 1:
             sample_checkpoints.append((-1 / 24.) * running_estimate / float(n + 1))
             sample_num_checkpoints.append(n+1)
-            # print("v2 =", v2 / float(n+1))
-    return sample_num_checkpoints, sample_checkpoints, num_zero
+    return sample_num_checkpoints, sample_checkpoints, v2 / float(samples)
 
 
 def bits_for_epsilon(eps: float, max_depth: int = 40) -> int:
