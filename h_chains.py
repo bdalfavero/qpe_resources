@@ -93,8 +93,8 @@ def main():
     print(f"dt_bound = {dt_bound}")
 
     # Use the sampling method.
-    sample_checkpoints, eps2_sampled, _ = sample_eps2(groups, qs, ground_state, nsamples, max_mpo_bond=max_mpo_bond)
-    print(f"eps2_sampled = {eps2_sampled[-1]}")
+    # sample_checkpoints, eps2_sampled, _ = sample_eps2(groups, qs, ground_state, nsamples, max_mpo_bond=max_mpo_bond)
+    # print(f"eps2_sampled = {eps2_sampled[-1]}")
 
     # # Synethsize a circuit with multiple ancillae (traditional QPE)
     evol_gate = PauliEvolutionGate(ham_qiskit, time=evol_time, synthesis=LieTrotter(reps=num_steps))
@@ -133,9 +133,9 @@ def main():
     f.create_dataset("energy_error", data=energy_error)
     f.create_dataset("eps2_exact", data=eps2)
     f.create_dataset("eps2_bound", data=eps2_bound)
-    f.create_dataset("sample_checkpoints", data=np.array(sample_checkpoints))
-    f.create_dataset("eps2_samples", data=np.array(eps2_sampled))
-    f.create_dataset("last_sample", data=eps2_sampled[-1])
+    # f.create_dataset("sample_checkpoints", data=np.array(sample_checkpoints))
+    # f.create_dataset("eps2_samples", data=np.array(eps2_sampled))
+    # f.create_dataset("last_sample", data=eps2_sampled[-1])
     f.create_dataset("dt", data=dt)
     f.create_dataset("num_steps", data=num_steps)
     f.create_dataset("sape_depth", data=sape_depth)
