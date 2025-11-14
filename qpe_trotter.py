@@ -32,7 +32,7 @@ def trotter_perturbation(hamiltonian_terms: List[cirq.PauliSum]) -> cirq.PauliSu
     h_prime = cirq.PauliSum()
     # TODO Can I parallelize this? Maybe only over the mu loop.
     for mu in range(2 * M - 1):
-        print(f"mu = {mu}")
+        print(f"mu = {mu}/{2 * M - 1}")
         if mu >= M:
             i = mu - M
             h_mu = hamiltonian_terms[M - 1 - i]
