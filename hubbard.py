@@ -14,9 +14,8 @@ from tensor_network_common import pauli_sum_to_mpo
 from convert import cirq_pauli_sum_to_qiskit_pauli_op
 from qpe_trotter import (
     group_single_strings,
-    trotter_perturbation,
+    v2_pauli_sum,
     get_gate_counts,
-    sample_eps2
 )
 
 def main():
@@ -68,8 +67,8 @@ def main():
     print(f"Evolution time = {evol_time}")
 
     # Use the exact method.
-    groups = group_single_strings(ham_cirq)
-    v2 = trotter_perturbation(groups)
+    groups = [ps for ps in ham_cirq]
+    v2 = v2_pauli_sum(groups)
     v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
     # Get energy from Mehendale Eqn. 8
     eps2 = (ground_state.H @ v2_mpo.apply(ground_state)).real
@@ -107,9 +106,8 @@ def main():
     
     # Synthesize a controlled Trotter step of time dt.
     print("Synthesizing SAPE circuit.")
-    sape_ckt = qiskit.QuantumCircuit(nq + 1)
-    controlled_evol_gate = evol_gate.control()
-    sape_ckt.append(controlled_evol_gate, range(nq + 1))
+    sape_ckt = qiskit.QuantumCircuit(nq)
+    sape_ckt.append(evol_gate, range(nq))
     sape_transpiled = transpile(sape_ckt, basis_gates=["u3", "cx"])
     sape_depth = sape_transpiled.depth()
     sape_counts = get_gate_counts(sape_transpiled)
