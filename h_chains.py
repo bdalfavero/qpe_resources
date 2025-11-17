@@ -15,8 +15,7 @@ from tensor_network_common import pauli_sum_to_mpo
 from convert import cirq_pauli_sum_to_qiskit_pauli_op
 from qpe_trotter import (
     group_single_strings,
-    trotter_perturbation,
-    bits_for_epsilon,
+    v2_pauli_sum,
     get_gate_counts,
     sample_eps2
 )
@@ -74,7 +73,7 @@ def main():
     print(f"Evolution time = {evol_time}")
 
     groups = [ps for ps in ham_cirq]
-    v2 = trotter_perturbation(groups)
+    v2 = v2_pauli_sum(groups)
     v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
     # Get energy from Mehendale Eqn. 8
     eps2 = (ground_state.H @ v2_mpo.apply(ground_state)).real
