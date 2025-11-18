@@ -17,6 +17,7 @@ from qpe_trotter import (
     v2_pauli_sum,
     get_gate_counts,
 )
+from kcommute import get_si_sets
 
 def main():
     parser = argparse.ArgumentParser()
@@ -30,10 +31,12 @@ def main():
     l2 = input_dict["l2"]
     t = input_dict["t"]
     u = input_dict["u"]
-    nsamples = int(input_dict["nsamples"])
+    # nsamples = int(input_dict["nsamples"])
     max_mpo_bond = input_dict["max_mpo_bond"]
     max_mps_bond = input_dict["max_mps_bond"]
     energy_error = input_dict["energy_error"]
+    k = input_dict["k"]
+    method = input_dict["method"]
 
     ham = of.fermi_hubbard(l1, l2, t, u, spinless=True)
     ham_jw = of.transforms.jordan_wigner(ham)
@@ -67,8 +70,15 @@ def main():
     print(f"Evolution time = {evol_time}")
 
     # Use the exact method.
-    groups = [ps for ps in ham_cirq]
-    v2 = v2_pauli_sum(groups)
+    if method == "strings":
+        groups = [ps for ps in ham_cirq]
+        v2 = v2_pauli_sum(groups)
+    else:
+        # Use SI.
+        groups = get_si_sets(ham_cirq)
+        print(f"Hamiltonian has {len(groups)} groups.")
+        group_psums = [sum(group) for group in groups]
+        v2 = v2_pauli_sum(group_psums)
     v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
     # Get energy from Mehendale Eqn. 8
     eps2 = (ground_state.H @ v2_mpo.apply(ground_state)).real
