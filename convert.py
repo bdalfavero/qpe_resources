@@ -1,6 +1,6 @@
 """Code to convert between libraries, e.g. from a Cirq.PauliSum to a qiskit.SparsePauliOp."""
 
-from typing import List
+from typing import List, Optional
 
 import cirq
 from cirq.contrib.qasm_import import circuit_from_qasm
