@@ -5,6 +5,7 @@ from typing import List, Dict, Tuple, Union
 from random import randint, random
 import numpy as np
 import cirq
+import openfermion as of
 import qiskit
 from quimb.tensor.tensor_1d import MatrixProductState
 from tensor_network_common import pauli_sum_to_mpo, mpo_mps_exepctation
@@ -36,6 +37,23 @@ def v2_pauli_sum(hamiltonian_terms: List[cirq.PauliSum]) -> cirq.PauliSum:
     for i,j,k in term_combs_V1_v2:
         V1_term = commutator(i, j)
         v2 += - commutator(V1_term, k)*1/3 - commutator(V1_term, j)*1/6
+    return v2
+
+
+def v2_qubop(hamiltonian_terms: List[of.QubitOperator]) -> of.QubitOperator:
+    """"Calculates V2 the same way as in the get_v2_sarray function of error_pert.py"""
+    
+    nterms = len(hamiltonian_terms)
+    term_sums_l2r = list(accumulate(hamiltonian_terms))
+    temp = reversed(hamiltonian_terms)
+    term_sums_r2l = list(accumulate(temp))
+    term_sums_r2l = list(reversed(term_sums_r2l))
+    term_sums_r2l.append(cirq.PauliSum())
+    term_combs_V1_v2 = [(term_sums_l2r[i-1], hamiltonian_terms[i], term_sums_r2l[i+1]) for i in range (1, nterms)]
+    v2 = cirq.PauliSum()
+    for i,j,k in term_combs_V1_v2:
+        V1_term = of.commutator(i, j)
+        v2 += - of.commutator(V1_term, k)*1/3 - of.commutator(V1_term, j)*1/6
     return v2
 
 
