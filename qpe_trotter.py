@@ -7,8 +7,14 @@ import numpy as np
 import cirq
 import openfermion as of
 import qiskit
-from quimb.tensor.tensor_1d import MatrixProductState
+from quimb.tensor.tensor_1d import MatrixProductState, MatrixProductOperator
 from tensor_network_common import pauli_sum_to_mpo, mpo_mps_exepctation
+from qtoolbox.core.pauli import PauliString
+from qtoolbox.core.hamiltonian import Hamiltonian
+from qtoolbox.converters.openfermion_bridge import from_openfermion
+from qtoolbox.grouping import sorted_insertion_grouping
+from itertools import accumulate
+from multiprocessing import Pool, cpu_count
 
 def group_single_strings(ham: cirq.PauliSum) -> List[cirq.PauliSum]:
     """A partitioning where each partition contains a single string."""
@@ -190,3 +196,165 @@ def get_gate_counts(circuit: qiskit.QuantumCircuit) -> Dict[int, int]:
         else:
             counts[inst_nq] = 1
     return counts
+
+
+def fast_commutator_sum(a_terms, b_terms):
+    result = []
+    for ai in a_terms:
+        for bj in b_terms:
+            if not ai.commutes_with(bj):  
+                p = ai.multiply(bj)       
+                p.coeff *= 2              
+                result.append(p)
+    return result
+
+def apply_pauli_to_state(x_bits, z_bits, n_qubits, state):
+    dim = len(state)
+    result = state.copy()
+
+    x_bits_of, z_bits_of = 0, 0
+    for q in range(n_qubits):
+        if x_bits & (1 << q):
+            x_bits_of |= (1 << (n_qubits - 1 - q))
+        if z_bits & (1 << q):
+            z_bits_of |= (1 << (n_qubits - 1 - q))
+
+    if z_bits_of:
+        indices = np.arange(dim)
+        parity = np.zeros(dim, dtype=np.int8)
+        for b in range(n_qubits):
+            if z_bits_of & (1 << b):
+                parity ^= ((indices >> b) & 1).astype(np.int8)
+        result *= (1 - 2*parity)
+
+    if x_bits_of:
+        result = result[np.arange(dim) ^ x_bits_of]
+
+    y_bits = x_bits & z_bits
+    if y_bits:
+        result *= (1j) ** bin(y_bits).count('1')
+
+    return result
+
+def build_v2_terms(sym_groups):
+    nterms = len(sym_groups)
+    sums_l2r = list(accumulate(sym_groups, lambda a, b: a + b))
+    sums_r2l = list(reversed(list(accumulate(reversed(sym_groups), lambda a, b: a + b))))
+    sums_r2l.append([])
+
+    v2_terms = []
+    for i in range(1, nterms):
+        V1 = fast_commutator_sum(sums_l2r[i-1], sym_groups[i])
+        for t in fast_commutator_sum(V1, sums_r2l[i+1]):
+            t.coeff *= -1/3
+            v2_terms.append(t)
+        for t in fast_commutator_sum(V1, sym_groups[i]):
+            t.coeff *= -1/6
+            v2_terms.append(t)
+    return v2_terms
+
+def compute_expectation_sequential(v2_terms, psi, n_qubits):
+    eps2 = 0.0
+    for t in v2_terms:
+        p_state = apply_pauli_to_state(t.x_bits, t.z_bits, n_qubits, psi)
+        eps2 += (t.coeff * np.vdot(psi, p_state)).real
+    return eps2
+
+
+def compute_expectation_batch(args):
+    terms_data, psi, n_qubits = args
+    dim = len(psi)
+    total = 0.0
+    for x_bits, z_bits, coeff in terms_data:
+        result = psi.copy()
+        x_bits_of, z_bits_of = 0, 0
+        for q in range(n_qubits):
+            if x_bits & (1 << q):
+                x_bits_of |= (1 << (n_qubits - 1 - q))
+            if z_bits & (1 << q):
+                z_bits_of |= (1 << (n_qubits - 1 - q))
+        if z_bits_of:
+            indices = np.arange(dim)
+            parity = np.zeros(dim, dtype=np.int8)
+            for b in range(n_qubits):
+                if z_bits_of & (1 << b):
+                    parity ^= ((indices >> b) & 1).astype(np.int8)
+            result = result * (1 - 2*parity)
+        if x_bits_of:
+            result = result[np.arange(dim) ^ x_bits_of]
+        y_bits = x_bits & z_bits
+        if y_bits:
+            result = result * ((1j) ** bin(y_bits).count('1'))
+        total += (coeff * np.vdot(psi, result)).real
+    return total
+
+def compute_expectation_parallel(v2_terms, psi, n_qubits, n_workers=None):
+    if n_workers is None:
+        n_workers = max(1, cpu_count())  
+    terms_data = [(t.x_bits, t.z_bits, t.coeff) for t in v2_terms]
+    
+    batch_size = len(terms_data) // n_workers + 1
+    batches = [(terms_data[i:i+batch_size], psi, n_qubits) 
+               for i in range(0, len(terms_data), batch_size)]
+    
+    with Pool(n_workers) as pool:
+        results = pool.map(compute_expectation_batch, batches)
+    return sum(results)
+
+
+def to_groups_mpo(groups: List[List[cirq.PauliString]], qs: List[cirq.Qid], max_bond: int) -> List[MatrixProductOperator]:
+    """Convert groups from SI into a list of MatrixProductOperators."""
+
+    mpos: List[MatrixProductOperator] = []
+    for group in groups:
+        group_psum = sum(group)
+        group_mpo = pauli_sum_to_mpo(group_psum, qs, max_bond=max_bond)
+        mpos.append(group_mpo.copy())
+    return mpos
+
+def mpo_add_compress(
+    mpo_a: MatrixProductOperator, mpo_b: MatrixProductOperator,
+    compress: bool = False, max_bond: int = 100
+) -> MatrixProductOperator:
+    """Add two MPOs, optionally compressing them."""
+
+    mpo_sum = mpo_a + mpo_b
+    if compress:
+        mpo_sum.compress(max_bond=max_bond)
+    return mpo_sum
+
+
+def mpo_commutator(mpo_a: MatrixProductOperator, mpo_b: MatrixProductOperator) -> MatrixProductOperator:
+    """Take the commutator of two MPOs."""
+
+    return mpo_a.apply(mpo_b) - mpo_b.apply(mpo_a)
+
+
+def zeros_mpo(nsites: int, phys_dim: int=2) -> MatrixProductOperator:
+    """Returns an MPO corresponding to a matirx of all zeros."""
+
+    def fill_fun(shape):
+        return np.zeros(shape, dtype=complex)
+    
+    return MatrixProductOperator.from_fill_fn(fill_fun, L=nsites, bond_dim=1, phys_dim=phys_dim)
+
+
+def get_v2_contrib_mpo(fragments_list: List[MatrixProductOperator], psi: MatrixProductState, max_bond: int) -> float:
+    """Calculate eps2 when the fragments are MPOs."""
+
+    max_mpo_sites = max([len(mpo.tensor_map) for mpo in fragments_list])
+
+    frags_len = len(fragments_list)
+    frag_sums_l2r = list(accumulate(fragments_list, lambda a, b: mpo_add_compress(a, b, True, max_bond)))
+    temp = reversed(fragments_list)
+    frag_sums_r2l = list(accumulate(temp, lambda a, b: mpo_add_compress(a, b, True, max_bond)))
+    frag_sums_r2l = list(reversed(frag_sums_r2l))
+    frag_sums_r2l.append(zeros_mpo(max_mpo_sites))
+    frag_combs_V1_v2 = [(frag_sums_l2r[i-1], fragments_list[i], frag_sums_r2l[i+1]) for i in range (1, frags_len)]
+    eps2 = 0
+    for i,j,k in frag_combs_V1_v2:
+        V1_term = mpo_commutator(i, j)
+        term1 = psi.H @ psi.gate_with_mpo(mpo_commutator(V1_term, k))
+        term2 = psi.H @ psi.gate_with_mpo(mpo_commutator(V1_term, j))
+        eps2 += - term1 *1/3 - term2 *1/6
+    return eps2.real
