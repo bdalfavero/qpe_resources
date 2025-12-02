@@ -266,25 +266,7 @@ def compute_expectation_batch(args):
     dim = len(psi)
     total = 0.0
     for x_bits, z_bits, coeff in terms_data:
-        result = psi.copy()
-        x_bits_of, z_bits_of = 0, 0
-        for q in range(n_qubits):
-            if x_bits & (1 << q):
-                x_bits_of |= (1 << (n_qubits - 1 - q))
-            if z_bits & (1 << q):
-                z_bits_of |= (1 << (n_qubits - 1 - q))
-        if z_bits_of:
-            indices = np.arange(dim)
-            parity = np.zeros(dim, dtype=np.int8)
-            for b in range(n_qubits):
-                if z_bits_of & (1 << b):
-                    parity ^= ((indices >> b) & 1).astype(np.int8)
-            result = result * (1 - 2*parity)
-        if x_bits_of:
-            result = result[np.arange(dim) ^ x_bits_of]
-        y_bits = x_bits & z_bits
-        if y_bits:
-            result = result * ((1j) ** bin(y_bits).count('1'))
+        result = apply_pauli_to_state(x_bits, z_bits, n_qubits, psi)
         total += (coeff * np.vdot(psi, result)).real
     return total
 
