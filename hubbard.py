@@ -97,7 +97,6 @@ def main():
     sym_groups = [list(g.paulis) for g in group_collection.groups]
     v2_terms = build_v2_terms(sym_groups)
     eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
-    # eps2_toolbox = compute_expectation_sequential(v2_terms, ground_state_vec, nq)
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
 
     # # Use the largest term to get a pessimistic bound.

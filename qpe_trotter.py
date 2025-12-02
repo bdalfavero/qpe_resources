@@ -277,51 +277,51 @@ def pstring_mps_expectation(
 
 
 def compute_expectation_batch(args):
-    # terms_data, psi, n_qubits = args
-    # if isinstance(psi, np.ndarray):
-    #     dim = len(psi)
-    # elif isinstance(psi, MatrixProductState):
-    #     dim = 2 ** len(psi.tensor_map)
-    # else:
-    #     raise ValueError(f"psi if of type {type(psi)}.")
-    # qs = cirq.LineQubit.range(n_qubits)
-    # total = 0.0
-    # for x_bits, z_bits, coeff in terms_data:
-    #     if isinstance(psi, np.ndarray):
-    #         result = apply_pauli_to_state(x_bits, z_bits, n_qubits, psi)
-    #         total += (coeff * np.vdot(psi, result)).real
-    #     elif isinstance(psi, MatrixProductState):
-    #         pstring = PauliString(x_bits, z_bits, coeff)
-    #         total += pstring_mps_expectation(pstring, psi, qs)
-    #     else:
-    #         raise ValueError(f"psi if of type {type(psi)}.")
-    # return total
-
     terms_data, psi, n_qubits = args
-    dim = len(psi)
+    if isinstance(psi, np.ndarray):
+        dim = len(psi)
+    elif isinstance(psi, MatrixProductState):
+        dim = 2 ** len(psi.tensor_map)
+    else:
+        raise ValueError(f"psi if of type {type(psi)}.")
+    qs = cirq.LineQubit.range(n_qubits)
     total = 0.0
     for x_bits, z_bits, coeff in terms_data:
-        result = psi.copy()
-        x_bits_of, z_bits_of = 0, 0
-        for q in range(n_qubits):
-            if x_bits & (1 << q):
-                x_bits_of |= (1 << (n_qubits - 1 - q))
-            if z_bits & (1 << q):
-                z_bits_of |= (1 << (n_qubits - 1 - q))
-        if z_bits_of:
-            indices = np.arange(dim)
-            parity = np.zeros(dim, dtype=np.int8)
-            for b in range(n_qubits):
-                if z_bits_of & (1 << b):
-                    parity ^= ((indices >> b) & 1).astype(np.int8)
-            result = result * (1 - 2*parity)
-        if x_bits_of:
-            result = result[np.arange(dim) ^ x_bits_of]
-        y_bits = x_bits & z_bits
-        if y_bits:
-            result = result * ((1j) ** bin(y_bits).count('1'))
-        total += (coeff * np.vdot(psi, result)).real
+        if isinstance(psi, np.ndarray):
+            result = apply_pauli_to_state(x_bits, z_bits, n_qubits, psi)
+            total += (coeff * np.vdot(psi, result)).real
+        elif isinstance(psi, MatrixProductState):
+            pstring = PauliString(x_bits, z_bits, coeff)
+            total += pstring_mps_expectation(pstring, psi, qs)
+        else:
+            raise ValueError(f"psi if of type {type(psi)}.")
     return total
+
+    # terms_data, psi, n_qubits = args
+    # dim = len(psi)
+    # total = 0.0
+    # for x_bits, z_bits, coeff in terms_data:
+    #     result = psi.copy()
+    #     x_bits_of, z_bits_of = 0, 0
+    #     for q in range(n_qubits):
+    #         if x_bits & (1 << q):
+    #             x_bits_of |= (1 << (n_qubits - 1 - q))
+    #         if z_bits & (1 << q):
+    #             z_bits_of |= (1 << (n_qubits - 1 - q))
+    #     if z_bits_of:
+    #         indices = np.arange(dim)
+    #         parity = np.zeros(dim, dtype=np.int8)
+    #         for b in range(n_qubits):
+    #             if z_bits_of & (1 << b):
+    #                 parity ^= ((indices >> b) & 1).astype(np.int8)
+    #         result = result * (1 - 2*parity)
+    #     if x_bits_of:
+    #         result = result[np.arange(dim) ^ x_bits_of]
+    #     y_bits = x_bits & z_bits
+    #     if y_bits:
+    #         result = result * ((1j) ** bin(y_bits).count('1'))
+    #     total += (coeff * np.vdot(psi, result)).real
+    # return total
 
 def compute_expectation_parallel(v2_terms, psi, n_qubits, n_workers=None):
     if n_workers is None:
