@@ -96,8 +96,10 @@ def main():
     group_collection = sorted_insertion_grouping(ham_qt, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
     v2_terms = build_v2_terms(sym_groups)
-    eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
+    eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
+    eps2_err = abs(eps2_toolbox - eps2)
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
+    print(f"Absolute error {eps2_err:4.5e}.")
 
     # # Use the largest term to get a pessimistic bound.
     # coeffs = np.array([ps.coefficient for ps in ham_cirq])
