@@ -11,13 +11,16 @@ from qiskit.circuit.library import PauliEvolutionGate, phase_estimation
 from qiskit.synthesis import LieTrotter
 from qiskit import transpile
 import quimb.tensor as qtn
+from qtoolbox.core.hamiltonian import Hamiltonian
+from qtoolbox.converters.openfermion_bridge import from_openfermion
+from qtoolbox.grouping import sorted_insertion_grouping
 from tensor_network_common import pauli_sum_to_mpo
 from convert import cirq_pauli_sum_to_qiskit_pauli_op
 from qpe_trotter import (
-    group_single_strings,
     v2_pauli_sum,
-    get_gate_counts,
-    sample_eps2
+    build_v2_terms,
+    compute_expectation_parallel,
+    get_gate_counts
 )
 from kcommute import get_si_sets
 
@@ -33,9 +36,8 @@ def main():
     max_mpo_bond = input_dict["max_mpo_bond"]
     max_mps_bond = input_dict["max_mps_bond"]
     energy_error = input_dict["energy_error"]
-    # nsamples = int(input_dict["samples"])
     k = input_dict["k"]
-    method = input_dict["method"]
+    n_workers = input_dict["n_workers"]
 
     # ham = of.fermi_hubbard(l, l, t, u, spinless=True)
     # ham_jw = of.transforms.jordan_wigner(ham)
@@ -75,20 +77,31 @@ def main():
     evol_time = np.pi / (4. * ham_norm)
     print(f"Evolution time = {evol_time}")
 
-    if method == "strings":
-        groups = [ps for ps in ham_cirq]
-        v2 = v2_pauli_sum(groups)
-    else:
-        # Use SI.
-        groups = get_si_sets(ham_cirq)
-        print(f"Hamiltonian has {len(groups)} groups.")
-        group_psums = [sum(group) for group in groups]
-        v2 = v2_pauli_sum(group_psums)
-    v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
-    # Get energy from Mehendale Eqn. 8
-    eps2 = (ground_state.H @ v2_mpo.apply(ground_state)).real
-    print(f"eps2 = {eps2:4.5e}")
-    dt = sqrt(energy_error / eps2)
+    # # Use SI.
+    # groups = get_si_sets(ham_cirq)
+    # print(f"Hamiltonian has {len(groups)} groups.")
+    # group_psums = [sum(group) for group in groups]
+    # v2 = v2_pauli_sum(group_psums)
+    # v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
+    # # Get energy from Mehendale Eqn. 8
+    # eps2 = (ground_state.H @ v2_mpo.apply(ground_state)).real
+    # print(f"eps2 = {eps2:4.5e}")
+    # dt = sqrt(energy_error / eps2)
+    # num_steps = ceil(evol_time / dt)
+    # print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
+
+    # Use Jeremiah's quantum toolbox to compute eps2.
+    terms = [from_openfermion(term, coeff, nq)
+            for term, coeff in ham_jw.terms.items() if term]  # skip identity
+    ham = Hamiltonian(terms)
+    print(f"Loaded Hamiltonian: {ham.num_terms()} terms, {ham.num_qubits()} qubits")
+    group_collection = sorted_insertion_grouping(ham)
+    sym_groups = [list(g.paulis) for g in group_collection.groups]
+    v2_terms = build_v2_terms(sym_groups)
+    # eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
+    eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
+    print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
+    dt = sqrt(energy_error / eps2_toolbox)
     num_steps = ceil(evol_time / dt)
     print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
 
@@ -140,7 +153,7 @@ def main():
     f.create_dataset("l", data=l)
     f.create_dataset("evol_time", data=evol_time)
     f.create_dataset("energy_error", data=energy_error)
-    f.create_dataset("eps2_exact", data=eps2)
+    f.create_dataset("eps2_exact", data=eps2_toolbox)
     f.create_dataset("eps2_bound", data=eps2_bound)
     # f.create_dataset("sample_checkpoints", data=np.array(sample_checkpoints))
     # f.create_dataset("eps2_samples", data=np.array(eps2_sampled))
