@@ -13,6 +13,7 @@ from qtoolbox.core.pauli import PauliString
 from qtoolbox.core.hamiltonian import Hamiltonian
 from qtoolbox.converters.openfermion_bridge import from_openfermion
 from qtoolbox.grouping import sorted_insertion_grouping
+from qtoolbox.converters.openfermion_bridge import to_openfermion
 from itertools import accumulate
 from multiprocessing import Pool, cpu_count
 
@@ -261,13 +262,39 @@ def compute_expectation_sequential(v2_terms, psi, n_qubits):
     return eps2
 
 
+def pstring_mps_expectation(
+    pstring: PauliString, state: MatrixProductState, qs: List[cirq.Qid],
+    max_bond: int = 50
+) -> float:
+    """Compute the expectation of a PauliString."""
+
+    assert len(qs) == len(state.tensor_map)
+
+    pstring_of = to_openfermion(pstring)
+    pstring_cirq = of.transforms.qubit_operator_to_pauli_sum(pstring_of)
+    pstring_mpo = pauli_sum_to_mpo(pstring_cirq, qs, max_bond=max_bond)
+    return (state.H @ state.gate_with_mpo(pstring_mpo)).real
+
+
 def compute_expectation_batch(args):
     terms_data, psi, n_qubits = args
-    dim = len(psi)
+    if isinstance(psi, np.ndarray):
+        dim = len(psi)
+    elif isinstance(psi, MatrixProductState):
+        dim = 2 ** len(psi.tensor_map)
+    else:
+        raise ValueError(f"psi if of type {type(psi)}.")
+    qs = cirq.LineQubit.range(n_qubits)
     total = 0.0
     for x_bits, z_bits, coeff in terms_data:
-        result = apply_pauli_to_state(x_bits, z_bits, n_qubits, psi)
-        total += (coeff * np.vdot(psi, result)).real
+        if isinstance(psi, np.ndarray):
+            result = apply_pauli_to_state(x_bits, z_bits, n_qubits, psi)
+            total += (coeff * np.vdot(psi, result)).real
+        elif isinstance(psi, MatrixProductState):
+            pstring = PauliString(x_bits, z_bits, coeff)
+            total += pstring_mps_expectation(pstring, psi, qs)
+        else:
+            raise ValueError(f"psi if of type {type(psi)}.")
     return total
 
 def compute_expectation_parallel(v2_terms, psi, n_qubits, n_workers=None):
