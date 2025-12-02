@@ -87,14 +87,14 @@ def main():
     num_steps = ceil(evol_time / dt)
     print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
 
-    # Use the largest term to get a pessimistic bound.
-    coeffs = np.array([ps.coefficient for ps in ham_cirq])
-    i_max = np.argmax(np.abs(coeffs))
-    max_coeff = coeffs[i_max]
-    eps2_bound = (1. / 24) * 0.5 * max_coeff.real ** 3
-    print(f"eps2_bound = {eps2_bound}")
-    dt_bound = sqrt(energy_error / abs(eps2_bound)).real
-    print(f"dt_bound = {dt_bound}")
+    # # Use the largest term to get a pessimistic bound.
+    # coeffs = np.array([ps.coefficient for ps in ham_cirq])
+    # i_max = np.argmax(np.abs(coeffs))
+    # max_coeff = coeffs[i_max]
+    # eps2_bound = (1. / 24) * 0.5 * max_coeff.real ** 3
+    # print(f"eps2_bound = {eps2_bound}")
+    # dt_bound = sqrt(energy_error / abs(eps2_bound)).real
+    # print(f"dt_bound = {dt_bound}")
 
     # Use the sampling method.
     # sample_checkpoints, eps2_sampled, _ = sample_eps2(groups, qs, ground_state, nsamples, max_mpo_bond=max_mpo_bond)
