@@ -10,12 +10,16 @@ from qiskit.circuit.library import PauliEvolutionGate, phase_estimation
 from qiskit.synthesis import LieTrotter
 from qiskit import transpile
 import quimb.tensor as qtn
-from tensor_network_common import pauli_sum_to_mpo
+from qtoolbox.core.hamiltonian import Hamiltonian
+from qtoolbox.converters.openfermion_bridge import from_openfermion
+from qtoolbox.grouping import sorted_insertion_grouping
+from tensor_network_common import pauli_sum_to_mpo, mps_to_vector
 from convert import cirq_pauli_sum_to_qiskit_pauli_op
 from qpe_trotter import (
-    group_single_strings,
     v2_pauli_sum,
-    get_gate_counts,
+    build_v2_terms,
+    compute_expectation_parallel,
+    get_gate_counts
 )
 from kcommute import get_si_sets
 
@@ -31,12 +35,11 @@ def main():
     l2 = input_dict["l2"]
     t = input_dict["t"]
     u = input_dict["u"]
-    # nsamples = int(input_dict["nsamples"])
     max_mpo_bond = input_dict["max_mpo_bond"]
     max_mps_bond = input_dict["max_mps_bond"]
     energy_error = input_dict["energy_error"]
     k = input_dict["k"]
-    method = input_dict["method"]
+    n_workers = input_dict["n_workers"]
 
     ham = of.fermi_hubbard(l1, l2, t, u, spinless=True)
     ham_jw = of.transforms.jordan_wigner(ham)
@@ -56,6 +59,7 @@ def main():
         print("DMRG did not converge!")
     ground_state = dmrg.state
     ground_energy = dmrg.energy.real
+    ground_state_vec = mps_to_vector(ground_state)
     print(f"Final DMRG energy: {ground_energy:4.5e}")
 
     if nq <= 10:
@@ -70,15 +74,11 @@ def main():
     print(f"Evolution time = {evol_time}")
 
     # Use the exact method.
-    if method == "strings":
-        groups = [ps for ps in ham_cirq]
-        v2 = v2_pauli_sum(groups)
-    else:
-        # Use SI.
-        groups = get_si_sets(ham_cirq)
-        print(f"Hamiltonian has {len(groups)} groups.")
-        group_psums = [sum(group) for group in groups]
-        v2 = v2_pauli_sum(group_psums)
+    # Use SI.
+    groups = get_si_sets(ham_cirq, k=k)
+    print(f"Hamiltonian has {len(groups)} groups.")
+    group_psums = [sum(group) for group in groups]
+    v2 = v2_pauli_sum(group_psums)
     v2_mpo = pauli_sum_to_mpo(v2, qs, max_mpo_bond)
     # Get energy from Mehendale Eqn. 8
     eps2 = (ground_state.H @ v2_mpo.apply(ground_state)).real
@@ -86,6 +86,17 @@ def main():
     dt = sqrt(energy_error / eps2)
     num_steps = ceil(evol_time / dt)
     print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
+
+    # Use Jeremiah's quantum toolbox to compute eps2.
+    terms = [from_openfermion(term, coeff, nq)
+            for term, coeff in ham_jw.terms.items() if term]  # skip identity
+    ham = Hamiltonian(terms)
+    print(f"Loaded Hamiltonian: {ham.num_terms()} terms, {ham.num_qubits()} qubits")
+    group_collection = sorted_insertion_grouping(ham)
+    sym_groups = [list(g.paulis) for g in group_collection.groups]
+    v2_terms = build_v2_terms(sym_groups)
+    eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
+    print(f"eps2 from toolbox = {eps2:4.5e}")
 
     # # Use the largest term to get a pessimistic bound.
     # coeffs = np.array([ps.coefficient for ps in ham_cirq])
@@ -95,10 +106,6 @@ def main():
     # print(f"eps2_bound = {eps2_bound}")
     # dt_bound = sqrt(energy_error / abs(eps2_bound)).real
     # print(f"dt_bound = {dt_bound}")
-
-    # Use the sampling method.
-    # sample_checkpoints, eps2_sampled, _ = sample_eps2(groups, qs, ground_state, nsamples, max_mpo_bond=max_mpo_bond)
-    # print(f"eps2_sampled = {eps2_sampled[-1]}")
 
     # Synethsize a circuit with multiple ancillae (traditional QPE)
     evol_gate = PauliEvolutionGate(ham_qiskit, time=evol_time, synthesis=LieTrotter(reps=num_steps))
@@ -130,25 +137,6 @@ def main():
         qubit_numbers.append(k)
         gate_counts.append(v)
     
-    # output_dict = {
-    #     "l1": l1,
-    #     "l2": l2,
-    #     "t": t,
-    #     "u": u,
-    #     "evol_time": evol_time,
-    #     "energy_error": energy_error,
-    #     "eps2_exact": eps2,
-    #     "eps2_bound": eps2_bound,
-    #     "sample_checkpoints": sample_checkpoints,
-    #     "eps2_samples": eps2_sampled,
-    #     "dt": dt,
-    #     "num_steps": num_steps,
-    #     "sape_depth": sape_depth,
-    #     "sape_counts": sape_counts
-    # }
-    # with open(args.output_file, "w") as f:
-    #     json.dump(output_dict, f)
-
     f = h5py.File(args.output_file, "w")
     f.create_dataset("l1", data=l1)
     f.create_dataset("l2", data=l2)
@@ -157,10 +145,7 @@ def main():
     f.create_dataset("evol_time", data=evol_time)
     f.create_dataset("energy_error", data=energy_error)
     f.create_dataset("eps2_exact", data=eps2)
-    f.create_dataset("eps2_bound", data=eps2_bound)
-    # f.create_dataset("sample_checkpoints", data=np.array(sample_checkpoints))
-    # f.create_dataset("eps2_samples", data=np.array(eps2_sampled))
-    # f.create_dataset("last_sample", data=eps2_sampled[-1])
+    f.create_dataset("eps2_toolbox", data=eps2_toolbox)
     f.create_dataset("dt", data=dt)
     f.create_dataset("num_steps", data=num_steps)
     f.create_dataset("sape_depth", data=sape_depth)
