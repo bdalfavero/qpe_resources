@@ -19,6 +19,7 @@ from qpe_trotter import (
     v2_pauli_sum,
     build_v2_terms,
     compute_expectation_parallel,
+    compute_expectation_sequential,
     get_gate_counts
 )
 from kcommute import get_si_sets
@@ -90,14 +91,14 @@ def main():
     # Use Jeremiah's quantum toolbox to compute eps2.
     terms = [from_openfermion(term, coeff, nq)
             for term, coeff in ham_jw.terms.items() if term]  # skip identity
-    ham = Hamiltonian(terms)
-    print(f"Loaded Hamiltonian: {ham.num_terms()} terms, {ham.num_qubits()} qubits")
-    group_collection = sorted_insertion_grouping(ham)
+    ham_qt = Hamiltonian(terms)
+    print(f"Loaded Hamiltonian: {ham_qt.num_terms()} terms, {ham_qt.num_qubits()} qubits")
+    group_collection = sorted_insertion_grouping(ham_qt, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
     v2_terms = build_v2_terms(sym_groups)
-    # eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
-    eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
-    print(f"eps2 from toolbox = {eps2:4.5e}")
+    eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
+    # eps2_toolbox = compute_expectation_sequential(v2_terms, ground_state_vec, nq)
+    print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
 
     # # Use the largest term to get a pessimistic bound.
     # coeffs = np.array([ps.coefficient for ps in ham_cirq])
