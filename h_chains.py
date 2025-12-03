@@ -1,3 +1,4 @@
+from time import perf_counter_ns
 import argparse
 import json
 import h5py
@@ -91,15 +92,24 @@ def main():
     # print(f"dt = {dt:4.5e}, n_steps = {num_steps}")
 
     # Use Jeremiah's quantum toolbox to compute eps2.
+    start_time = perf_counter_ns()
     terms = [from_openfermion(term, coeff, nq)
             for term, coeff in ham_jw.terms.items() if term]  # skip identity
     ham = Hamiltonian(terms)
     print(f"Loaded Hamiltonian: {ham.num_terms()} terms, {ham.num_qubits()} qubits")
     group_collection = sorted_insertion_grouping(ham)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
+    end_time = perf_counter_ns()
+    sorting_time = float(end_time - start_time)
+    start_time = perf_counter_ns()
     v2_terms = build_v2_terms(sym_groups)
+    end_time = perf_counter_ns()
+    v2_time = float(end_time - start_time)
     # eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
+    start_time = perf_counter_ns()
     eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
+    end_time = perf_counter_ns()
+    expectation_time = float(end_time - start_time)
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
     dt = sqrt(energy_error / eps2_toolbox)
     num_steps = ceil(evol_time / dt)
@@ -163,6 +173,9 @@ def main():
     f.create_dataset("sape_depth", data=sape_depth)
     f.create_dataset("qubit_numbers", data=qubit_numbers)
     f.create_dataset("gate_counts", data=gate_counts)
+    f.create_dataset("sorting_time", data=sorting_time)
+    f.create_dataset("v2_time", data=v2_time)
+    f.create_dataset("expectation_time", data=expectation_time)
     f.close()
 
 if __name__ == "__main__":
