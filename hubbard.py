@@ -95,7 +95,7 @@ def main():
     print(f"Loaded Hamiltonian: {ham_qt.num_terms()} terms, {ham_qt.num_qubits()} qubits")
     group_collection = sorted_insertion_grouping(ham_qt, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
-    v2_terms = build_v2_terms(sym_groups)
+    v2_terms = build_v2_terms(sym_groups, n_workers=n_workers)
     eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
     eps2_err = abs(eps2_toolbox - eps2)
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")

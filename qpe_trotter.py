@@ -1,7 +1,7 @@
 """This analysis is based on https://arxiv.org/abs/2312.13282"""
 
-from itertools import accumulate
-from typing import List, Dict, Tuple, Union
+from itertools import accumulate, product
+from typing import List, Dict, Tuple, Union, Optional
 from random import randint, random
 import numpy as np
 import cirq
@@ -15,7 +15,8 @@ from qtoolbox.converters.openfermion_bridge import from_openfermion
 from qtoolbox.grouping import sorted_insertion_grouping
 from qtoolbox.converters.openfermion_bridge import to_openfermion
 from itertools import accumulate
-from multiprocessing import Pool, cpu_count
+from multiprocessing import cpu_count
+from pathos.pools import ProcessPool as Pool
 
 def group_single_strings(ham: cirq.PauliSum) -> List[cirq.PauliSum]:
     """A partitioning where each partition contains a single string."""
@@ -209,6 +210,21 @@ def fast_commutator_sum(a_terms, b_terms):
                 result.append(p)
     return result
 
+
+def fast_commutator_sum_parallel(a_terms, b_terms, n_workers):
+    def fcsp_callback(ai, bs):
+        terms = []
+        for bj in b_terms:
+            if not ai.commutes_with(bj):  
+                p = ai.multiply(bj)       
+                p.coeff *= 2              
+                terms.append(p)
+        return terms
+
+    pool = Pool(n_workers)
+    result = pool.map(lambda a: fcsp_callback(a, b_terms), a_terms)
+    return sum(result, start=[])
+
 def apply_pauli_to_state(x_bits, z_bits, n_qubits, state):
     dim = len(state)
     result = state.copy()
@@ -237,7 +253,7 @@ def apply_pauli_to_state(x_bits, z_bits, n_qubits, state):
 
     return result
 
-def build_v2_terms(sym_groups):
+def build_v2_terms(sym_groups, n_workers: Optional[int]=None):
     nterms = len(sym_groups)
     sums_l2r = list(accumulate(sym_groups, lambda a, b: a + b))
     sums_r2l = list(reversed(list(accumulate(reversed(sym_groups), lambda a, b: a + b))))
@@ -245,11 +261,22 @@ def build_v2_terms(sym_groups):
 
     v2_terms = []
     for i in range(1, nterms):
-        V1 = fast_commutator_sum(sums_l2r[i-1], sym_groups[i])
-        for t in fast_commutator_sum(V1, sums_r2l[i+1]):
+        if n_workers is None:
+            V1 = fast_commutator_sum(sums_l2r[i-1], sym_groups[i])
+        else:
+            V1 = fast_commutator_sum_parallel(sums_l2r[i-1], sym_groups[i], n_workers)
+        if n_workers is None:
+            terms = fast_commutator_sum(V1, sums_r2l[i+1])
+        else:
+            terms = fast_commutator_sum_parallel(V1, sums_r2l[i+1], None)
+        for t in terms:
             t.coeff *= -1/3
             v2_terms.append(t)
-        for t in fast_commutator_sum(V1, sym_groups[i]):
+        if n_workers is None:
+            terms = fast_commutator_sum(V1, sym_groups[i])
+        else:
+            terms = fast_commutator_sum_parallel(V1, sym_groups[i], n_workers)
+        for t in terms:
             t.coeff *= -1/6
             v2_terms.append(t)
     return v2_terms
