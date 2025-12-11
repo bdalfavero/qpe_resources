@@ -102,7 +102,7 @@ def main():
     end_time = perf_counter_ns()
     sorting_time = float(end_time - start_time)
     start_time = perf_counter_ns()
-    v2_terms = build_v2_terms(sym_groups)
+    v2_terms = build_v2_terms(sym_groups, n_workers=n_workers)
     end_time = perf_counter_ns()
     v2_time = float(end_time - start_time)
     # eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
