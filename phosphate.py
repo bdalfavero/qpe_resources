@@ -40,7 +40,7 @@ def main():
     n_workers = input_dict["n_workers"]
     threshold = input_dict["threshold"]
 
-    hamiltonian = of.utils.load_operator(file_name="owp_631gd_22_ducc.data", data_directory="data/")
+    hamiltonian = of.utils.load_operator(file_name="owp_631gd_22_ducc.data", data_directory=".")
     hamiltonian.compress(abs_tol=threshold)
     print(f"Compressed Fermionic Hamiltonian has {len(hamiltonian.terms)} term(s).")
     ham_jw = of.transforms.jordan_wigner(hamiltonian)
