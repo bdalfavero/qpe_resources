@@ -97,7 +97,7 @@ def main():
     group_collection = sorted_insertion_grouping(ham_qt, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
     start_time = perf_counter_ns()
-    v2_terms, sum_time, comm_time = build_v2_terms(sym_groups, return_times=True)
+    v2_terms = build_v2_terms(sym_groups)
     end_time = perf_counter_ns()
     v2_time = end_time - start_time
     start_time = perf_counter_ns()
@@ -163,8 +163,6 @@ def main():
     f.create_dataset("gate_counts", data=gate_counts)
     f.create_dataset("v2_time", data=v2_time)
     f.create_dataset("eps2_time", data=eps2_time)
-    f.create_dataset("sum_time", data=sum_time)
-    f.create_dataset("comm_time", data=comm_time)
     f.create_dataset("n_workers", data=n_workers)
     f.close()
 
