@@ -261,22 +261,11 @@ def build_v2_terms(sym_groups, n_workers: Optional[int]=None):
 
     v2_terms = []
     for i in range(1, nterms):
-        if n_workers is None:
-            V1 = fast_commutator_sum(sums_l2r[i-1], sym_groups[i])
-        else:
-            V1 = fast_commutator_sum_parallel(sums_l2r[i-1], sym_groups[i], n_workers)
-        if n_workers is None:
-            terms = fast_commutator_sum(V1, sums_r2l[i+1])
-        else:
-            terms = fast_commutator_sum_parallel(V1, sums_r2l[i+1], None)
-        for t in terms:
+        V1 = fast_commutator_sum(sums_l2r[i-1], sym_groups[i])
+        for t in fast_commutator_sum(V1, sums_r2l[i+1]):
             t.coeff *= -1/3
             v2_terms.append(t)
-        if n_workers is None:
-            terms = fast_commutator_sum(V1, sym_groups[i])
-        else:
-            terms = fast_commutator_sum_parallel(V1, sym_groups[i], n_workers)
-        for t in terms:
+        for t in fast_commutator_sum(V1, sym_groups[i]):
             t.coeff *= -1/6
             v2_terms.append(t)
     return v2_terms
