@@ -1,4 +1,5 @@
 import argparse
+from time import perf_counter_ns
 import json
 import h5py
 from math import sqrt, ceil
@@ -95,8 +96,14 @@ def main():
     print(f"Loaded Hamiltonian: {ham_qt.num_terms()} terms, {ham_qt.num_qubits()} qubits")
     group_collection = sorted_insertion_grouping(ham_qt, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
+    start_time = perf_counter_ns()
     v2_terms = build_v2_terms(sym_groups, n_workers=n_workers)
+    end_time = perf_counter_ns()
+    v2_time = end_time - start_time
+    start_time = perf_counter_ns()
     eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
+    end_time = perf_counter_ns()
+    eps2_time = end_time - start_time
     eps2_err = abs(eps2_toolbox - eps2)
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
     print(f"Absolute error {eps2_err:4.5e}.")
@@ -154,6 +161,9 @@ def main():
     f.create_dataset("sape_depth", data=sape_depth)
     f.create_dataset("qubit_numbers", data=qubit_numbers)
     f.create_dataset("gate_counts", data=gate_counts)
+    f.create_dataset("v2_time", data=v2_time)
+    f.create_dataset("eps2_time", data=eps2_time)
+    f.create_dataset("n_workers", data=n_workers)
     f.close()
 
 if __name__ == "__main__":
