@@ -1,5 +1,6 @@
 """This analysis is based on https://arxiv.org/abs/2312.13282"""
 
+from time import perf_counter_ns
 from itertools import accumulate, product
 from typing import List, Dict, Tuple, Union, Optional
 from random import randint, random
@@ -253,12 +254,16 @@ def apply_pauli_to_state(x_bits, z_bits, n_qubits, state):
 
     return result
 
-def build_v2_terms(sym_groups, n_workers: Optional[int]=None):
+def build_v2_terms(sym_groups, n_workers: Optional[int]=None, return_times: bool=False):
+    start_time = perf_counter_ns()
     nterms = len(sym_groups)
     sums_l2r = list(accumulate(sym_groups, lambda a, b: a + b))
     sums_r2l = list(reversed(list(accumulate(reversed(sym_groups), lambda a, b: a + b))))
     sums_r2l.append([])
+    end_time = perf_counter_ns()
+    sum_time = float(abs(end_time - start_time))
 
+    start_time = perf_counter_ns()
     v2_terms = []
     for i in range(1, nterms):
         V1 = fast_commutator_sum(sums_l2r[i-1], sym_groups[i])
@@ -268,7 +273,12 @@ def build_v2_terms(sym_groups, n_workers: Optional[int]=None):
         for t in fast_commutator_sum(V1, sym_groups[i]):
             t.coeff *= -1/6
             v2_terms.append(t)
-    return v2_terms
+    end_time = perf_counter_ns()
+    comm_time = float(abs(end_time - start_time))
+    if return_times:
+        return v2_terms, sum_time, comm_time
+    else:
+        return v2_terms
 
 def compute_expectation_sequential(v2_terms, psi, n_qubits):
     eps2 = 0.0
