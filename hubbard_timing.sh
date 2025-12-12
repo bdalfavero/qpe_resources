@@ -7,8 +7,11 @@ set -e
 cd data/hubbard_timing
 
 sizes=(2 3 4 5)
+ncores=(1 2 4 6)
 for size in ${sizes[@]}; do
-    jq ".l1 = ${size} | .l2 = ${size}" hubbard_in_2_2.json > hubbard_l${size}.json
+    for nc in ${ncores[@]}; do
+        jq ".l1 = ${size} | .l2 = ${size} | .n_workers = ${nc}" hubbard_in_2_2.json > hubbard_l${size}_n${nc}.json
+    done
 done
 
 cd ../..

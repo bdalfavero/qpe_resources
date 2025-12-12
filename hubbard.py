@@ -19,6 +19,7 @@ from convert import cirq_pauli_sum_to_qiskit_pauli_op
 from qpe_trotter import (
     v2_pauli_sum,
     build_v2_terms,
+    build_v2_terms_parallel,
     compute_expectation_parallel,
     compute_expectation_sequential,
     get_gate_counts
@@ -108,6 +109,25 @@ def main():
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
     print(f"Absolute error {eps2_err:4.5e}.")
 
+    # Use the parallel version of the quantum toolbox code.
+    terms = [from_openfermion(term, coeff, nq)
+            for term, coeff in ham_jw.terms.items() if term]  # skip identity
+    ham_qt = Hamiltonian(terms)
+    print(f"Loaded Hamiltonian: {ham_qt.num_terms()} terms, {ham_qt.num_qubits()} qubits")
+    group_collection = sorted_insertion_grouping(ham_qt, k=k)
+    sym_groups = [list(g.paulis) for g in group_collection.groups]
+    start_time = perf_counter_ns()
+    v2_terms = build_v2_terms_parallel(sym_groups, n_workers=n_workers)
+    end_time = perf_counter_ns()
+    v2_time_parallel = end_time - start_time
+    start_time = perf_counter_ns()
+    eps2_parallel = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
+    end_time = perf_counter_ns()
+    eps2_time_parallel = end_time - start_time
+    eps2_err = abs(eps2_parallel - eps2)
+    print(f"eps2 from toolbox = {eps2_parallel:4.5e}")
+    print(f"Absolute error {eps2_err:4.5e}.")
+
     # # Use the largest term to get a pessimistic bound.
     # coeffs = np.array([ps.coefficient for ps in ham_cirq])
     # i_max = np.argmax(np.abs(coeffs))
@@ -163,6 +183,8 @@ def main():
     f.create_dataset("gate_counts", data=gate_counts)
     f.create_dataset("v2_time", data=v2_time)
     f.create_dataset("eps2_time", data=eps2_time)
+    f.create_dataset("v2_time_parallel", data=v2_time_parallel)
+    f.create_dataset("eps2_time_parallel", data=eps2_time_parallel)
     f.create_dataset("n_workers", data=n_workers)
     f.close()
 

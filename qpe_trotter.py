@@ -271,6 +271,29 @@ def build_v2_terms(sym_groups):
             v2_terms.append(t)
     return v2_terms
 
+
+def build_v2_terms_parallel(sym_groups, n_workers: int=1):
+    nterms = len(sym_groups)
+    sums_l2r = list(accumulate(sym_groups, lambda a, b: a + b))
+    sums_r2l = list(reversed(list(accumulate(reversed(sym_groups), lambda a, b: a + b))))
+    sums_r2l.append([])
+
+    def callback(i):
+        v2_terms = []
+        V1 = fast_commutator_sum(sums_l2r[i-1], sym_groups[i])
+        for t in fast_commutator_sum(V1, sums_r2l[i+1]):
+            t.coeff *= -1/3
+            v2_terms.append(t)
+        for t in fast_commutator_sum(V1, sym_groups[i]):
+            t.coeff *= -1/6
+            v2_terms.append(t)
+        return v2_terms
+
+    pool = Pool(n_workers)
+    result = pool.map(callback, range(1, nterms))
+    return sum(result, start=[])
+
+
 def compute_expectation_sequential(v2_terms, psi, n_qubits):
     eps2 = 0.0
     for t in v2_terms:
