@@ -118,6 +118,7 @@ def main():
     sym_groups = [list(g.paulis) for g in group_collection.groups]
     start_time = perf_counter_ns()
     v2_terms = build_v2_terms_parallel(sym_groups, n_workers=n_workers)
+    n_v2_terms = len(v2_terms)
     end_time = perf_counter_ns()
     v2_time_parallel = end_time - start_time
     start_time = perf_counter_ns()
@@ -168,6 +169,8 @@ def main():
         gate_counts.append(v)
     
     f = h5py.File(args.output_file, "w")
+    f.create_dataset("nterms", data=nterms)
+    f.create_dataset("n_v2_terms", data=n_v2_terms)
     f.create_dataset("l1", data=l1)
     f.create_dataset("l2", data=l2)
     f.create_dataset("t", data=t)
