@@ -62,7 +62,7 @@ def main():
         print("DMRG did not converge!")
     ground_state = dmrg.state
     ground_energy = dmrg.energy.real
-    ground_state_vec = mps_to_vector(ground_state)
+    # ground_state_vec = mps_to_vector(ground_state)
     print(f"Final DMRG energy: {ground_energy:4.5e}")
 
     if nq <= 10:
