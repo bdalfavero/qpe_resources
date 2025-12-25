@@ -27,10 +27,11 @@ def main():
     k = input_dict["k"]
     n_workers = input_dict["n_workers"]
     threshold = input_dict["threshold"]
+    ham_dir = input_dict["ham_dir"] # Where to read Hamiltonian and ground state from.
 
-    ground_state = load_from_disk("owp_ground_state_25.dat")
-    ham_mpo = load_from_disk("owp_mpo_chi_1000.dat")
-    hamiltonian = of.utils.load_operator(file_name="owp_631gd_22_ducc.data", data_directory=".")
+    ground_state = load_from_disk(f"{ham_dir}/owp_ground_state_25.dat")
+    ham_mpo = load_from_disk(f"{ham_dir}/owp_mpo_chi_1000.dat")
+    hamiltonian = of.utils.load_operator(file_name="owp_631gd_22_ducc.data", data_directory=ham_dir)
     nterms_before = len(hamiltonian.terms)
     hamiltonian.compress(abs_tol=threshold)
     nterms_after = len(hamiltonian.terms)
@@ -44,7 +45,7 @@ def main():
             for term, coeff in ham_jw.terms.items() if term]  # skip identity
     ham = Hamiltonian(terms)
     print(f"Loaded Hamiltonian: {ham.num_terms()} terms, {ham.num_qubits()} qubits")
-    group_collection = sorted_insertion_grouping(ham)
+    group_collection = sorted_insertion_grouping(ham, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
     v2_terms = build_v2_terms(sym_groups, n_workers=n_workers)
     # eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
