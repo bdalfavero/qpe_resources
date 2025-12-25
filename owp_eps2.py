@@ -11,6 +11,7 @@ from qtoolbox.grouping import sorted_insertion_grouping
 from qpe_trotter import (
     v2_pauli_sum,
     build_v2_terms,
+    build_v2_terms_parallel,
     compute_expectation_parallel,
     get_gate_counts
 )
@@ -47,7 +48,7 @@ def main():
     print(f"Loaded Hamiltonian: {ham.num_terms()} terms, {ham.num_qubits()} qubits")
     group_collection = sorted_insertion_grouping(ham, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
-    v2_terms = build_v2_terms(sym_groups, n_workers=n_workers)
+    v2_terms = build_v2_terms_parallel(sym_groups, n_workers=n_workers)
     # eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
     eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
