@@ -40,15 +40,19 @@ def main():
     nq = of.utils.count_qubits(ham_jw)
 
     evol_time = np.pi / ham_mpo.norm()
+    print(f"evol_time = {evol_time}")
 
     # Use Jeremiah's quantum toolbox to compute eps2.
     terms = [from_openfermion(term, coeff, nq)
             for term, coeff in ham_jw.terms.items() if term]  # skip identity
     ham = Hamiltonian(terms)
     print(f"Loaded Hamiltonian: {ham.num_terms()} terms, {ham.num_qubits()} qubits")
+    print("Grouping")
     group_collection = sorted_insertion_grouping(ham, k=k)
     sym_groups = [list(g.paulis) for g in group_collection.groups]
+    print("Computing V2 terms.")
     v2_terms = build_v2_terms_parallel(sym_groups, n_workers=n_workers)
+    print("Done computing V2 terms. Taking exp. vals.")
     # eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state_vec, nq, n_workers)
     eps2_toolbox = compute_expectation_parallel(v2_terms, ground_state, nq, n_workers)
     print(f"eps2 from toolbox = {eps2_toolbox:4.5e}")
