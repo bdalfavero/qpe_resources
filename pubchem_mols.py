@@ -102,7 +102,9 @@ def main():
         gate_counts.append(v)
     
     f = h5py.File(args.output_file, "w")
-    f.create_dataset("l", data=l)
+    f.create_dataset("molec_name", data=molec_name)
+    f.create_dataset("nq", data=nq)
+    f.create_dataset("nterms", data=nterms)
     f.create_dataset("evol_time", data=evol_time)
     f.create_dataset("energy_error", data=energy_error)
     f.create_dataset("eps2_exact", data=eps2_toolbox)
